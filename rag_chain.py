@@ -74,7 +74,11 @@ def ask(question):
         url = doc.metadata.get("url", "")
         if title not in seen:
             seen.add(title)
-            unique_sources.append({"title": title, "url": url})
+            unique_sources.append({
+                "title": title,
+                "section": doc.metadata.get("section", ""),
+                "url": url
+            })
 
     return answer, unique_sources
 

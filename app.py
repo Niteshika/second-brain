@@ -18,12 +18,22 @@ st.caption("Chat with your Notion notes using AI")
 with st.sidebar:
     st.header("⚙️ Settings")
 
-    if st.button("🔄 Sync Notion Notes", use_container_width=True):
-        with st.spinner("Fetching your notes from Notion..."):
+    if st.button("🔄 Sync New/Updated Notion Notes", use_container_width=True):
+        with st.spinner("Checking for updated notes..."):
+            docs = load_notion_documents(force_resync=False)
+        if docs:
+            with st.spinner("Embedding changes..."):
+                embed_documents(docs)
+            st.success(f"✅ Synced {len(docs)} new/updated sections!")
+        else:
+            st.info("✅ Everything is already up to date!")
+
+    if st.button("🔄 Force Full Resync", use_container_width=True):
+        with st.spinner("Resyncing all notes from Notion..."):
             docs = load_notion_documents()
         with st.spinner("Embedding into vector store..."):
             embed_documents(docs)
-        st.success(f"✅ Synced {len(docs)} pages!")
+        st.success(f"✅ Resynced {len(docs)} sections!")
 
     st.divider()
     st.markdown("### How to use")
@@ -53,7 +63,14 @@ for message in st.session_state.messages:
         if message.get("sources"):
             with st.expander("📌 Sources"):
                 for source in message["sources"]:
-                    st.markdown(f"- [{source['title']}]({source['url']})")
+                    title = source['title'] if source['title'] else "Untitled"
+                    section = source.get('section', '')
+                    url = source['url']
+                    label = f"{title} — *{section}*" if section else title
+                    if url:
+                        st.markdown(f"- [{label}]({url})")
+                    else:
+                        st.markdown(f"- {label}")
 
 # Chat input
 if question := st.chat_input("Ask anything about your notes..."):
@@ -71,7 +88,14 @@ if question := st.chat_input("Ask anything about your notes..."):
         if sources:
             with st.expander("📌 Sources"):
                 for source in sources:
-                    st.markdown(f"- [{source['title']}]({source['url']})")
+                    title = source['title'] if source['title'] else "Untitled"
+                    section = source.get('section', '')
+                    url = source['url']
+                    label = f"{title} — *{section}*" if section else title
+                    if url:
+                        st.markdown(f"- [{label}]({url})")
+                    else:
+                        st.markdown(f"- {label}")
 
     # Save to session state
     st.session_state.messages.append({
