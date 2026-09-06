@@ -1,4 +1,5 @@
 import os
+from app.core.parser import parse_documents
 import chromadb
 from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_google_genai import GoogleGenerativeAIEmbeddings
@@ -18,6 +19,9 @@ collection = chroma_client.get_or_create_collection(name="second_brain")
 def embed_documents(documents):
     """Embed heading-based chunks into ChromaDB"""
     print("🔄 Starting embedding process...\n")
+
+    # Parse and clean before embedding
+    documents = parse_documents(documents)
 
     for doc in documents:
         chunk_id = doc["page_id"]

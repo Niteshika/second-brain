@@ -3,3 +3,12 @@ venv/
 data/
 __pycache__/
 *.pyc
+check_models.py
+architecture-decisions.md
+test_knowledge_gap.py
+test.py
+test_chat_stream.py
+frontend
+second-brain-eval-report.pdf
+second-brain-frontend/node_modules/
+second-brain-frontend/dist/

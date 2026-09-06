@@ -38,12 +38,12 @@ def get_all_pages():
 
     return results
 
-def extract_text_from_blocks(page_id):
+def extract_text_from_blocks(page_id, title):
     """Extract text chunked by headings from a Notion page"""
     blocks = notion.blocks.children.list(block_id=page_id)
     
     chunks = []
-    current_heading = "Introduction"
+    current_heading = title if title else "Untitled section"
     current_lines = []
 
     for block in blocks["results"]:
@@ -115,8 +115,8 @@ def extract_text_from_blocks(page_id):
                         )
                         if row_text.strip():
                             current_lines.append(row_text)
-            except:
-                pass
+            except Exception as e:
+                print(f"⚠️ Failed to extract table on page {page_id}: {e}")
 
     # Don't forget the last section
     if current_lines:
@@ -154,7 +154,7 @@ def load_notion_documents(force_resync=False):
                     break
 
             # Get heading-based chunks
-            chunks = extract_text_from_blocks(page["id"])
+            chunks = extract_text_from_blocks(page["id"], title)
 
             if not chunks:
                 continue

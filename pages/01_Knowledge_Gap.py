@@ -8,7 +8,7 @@ st.set_page_config(
 )
 
 st.title("🔍 Knowledge Gap Detector")
-st.caption("Understand what topics you're missing based on your Notion notes")
+st.caption("Understand what you know, what you're missing, and where your notes need attention")
 
 st.divider()
 
@@ -53,3 +53,33 @@ if st.button("🚀 Run Analysis", use_container_width=True):
                 st.warning(f"📭 **{spot['topic']}**\n\n{spot['description']}")
         else:
             st.success("Great coverage! No major gaps detected.")
+
+        st.divider()
+
+        # ---- Contradictions ----
+        st.subheader("⚡ Contradictions in Your Notes")
+        if results["contradictions"]:
+            for i, c in enumerate(results["contradictions"]):
+                with st.expander(f"Contradiction {i+1} — {c['reason']}"):
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.markdown(f"**From:** {c['source_1']}")
+                        st.info(c["note_1"])
+                    with col2:
+                        st.markdown(f"**From:** {c['source_2']}")
+                        st.error(c["note_2"])
+        else:
+            st.success("No contradictions found in your notes!")
+
+        st.divider()
+
+        # ---- Stale Notes ----
+        st.subheader("🕰️ Stale Notes — Not Updated in 90+ Days")
+        if results["stale_notes"]:
+            for note in results["stale_notes"]:
+                with st.expander(f"📄 {note['title']} — last edited {note['last_edited']} ({note['age_days']} days ago)"):
+                    st.markdown(f"**Preview:** {note['preview']}")
+                    if note['url']:
+                        st.markdown(f"[Open in Notion]({note['url']})")
+        else:
+            st.success("All your notes are up to date!")

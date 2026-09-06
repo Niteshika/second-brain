@@ -11,7 +11,7 @@ load_dotenv()
 
 # Initialize Gemini
 llm = ChatGroq(
-    model="llama-3.3-70b-versatile",
+    model="openai/gpt-oss-120b",
     api_key=os.getenv("GROQ_API_KEY"),
     temperature=0.3
 )
@@ -53,7 +53,7 @@ def cluster_chunks(embeddings_matrix, n_clusters=None):
 
 
 def name_cluster(chunks_in_cluster):
-    """Ask Gemini to name a cluster based on its content"""
+    """Ask llama to name a cluster based on its content"""
     sample = "\n\n".join(chunks_in_cluster[:3])
     prompt = f"""Based on these notes, give a short 2-4 word topic name that best describes them.
 Reply with ONLY the topic name, nothing else.
@@ -92,6 +92,95 @@ No explanation, no markdown, just the JSON array."""
         return json.loads(clean)
     except:
         return [{"topic": "Could not detect gaps", "description": "Try adding more notes and rerunning"}]
+
+def detect_contradictions(chunks, metadatas):
+    """Find contradicting notes within the same cluster"""
+    if len(chunks) < 2:
+        return []
+
+    contradictions = []
+    emb_matrix = np.array([
+        embeddings.embed_query(chunk) for chunk in chunks
+    ])
+
+    similarity_matrix = cosine_similarity(emb_matrix)
+    checked_pairs = set()
+
+    for i in range(len(chunks)):
+        for j in range(i + 1, len(chunks)):
+            if (i, j) in checked_pairs:
+                continue
+            checked_pairs.add((i, j))
+
+            if similarity_matrix[i][j] < 0.75:
+                continue
+
+            prompt = f"""Do these two notes contradict each other?
+Note 1: {chunks[i]}
+
+Note 2: {chunks[j]}
+
+Reply ONLY with a JSON object in this exact format:
+{{"contradicts": true/false, "reason": "one sentence explanation or empty string"}}
+No markdown, no extra text."""
+
+            try:
+                response = llm.invoke(prompt)
+                answer = response.content if isinstance(response.content, str) else response.content[0]["text"]
+                clean = answer.strip().replace("```json", "").replace("```", "").strip()
+                result = json.loads(clean)
+
+                if result.get("contradicts"):
+                    contradictions.append({
+                        "note_1": chunks[i][:200],
+                        "note_2": chunks[j][:200],
+                        "reason": result.get("reason", ""),
+                        "source_1": metadatas[i].get("title", "Untitled"),
+                        "source_2": metadatas[j].get("title", "Untitled"),
+                    })
+            except:
+                continue
+
+    return contradictions
+
+
+def detect_stale_notes(metadatas, documents, days_threshold=90):
+    """Find notes that haven't been updated in over 30 days"""
+    from datetime import datetime, timezone
+
+    stale = []
+    seen_pages = set()
+
+    for i, meta in enumerate(metadatas):
+        page_id = meta.get("title", "Untitled")
+        if page_id in seen_pages:
+            continue
+        seen_pages.add(page_id)
+
+        last_edited = meta.get("last_edited", "")
+        if not last_edited:
+            continue
+
+        try:
+            edited_date = datetime.fromisoformat(
+                last_edited.replace("Z", "+00:00")
+            )
+            age_days = (datetime.now(timezone.utc) - edited_date).days
+
+            if age_days >= days_threshold:
+                stale.append({
+                    "title": meta.get("title", "Untitled"),
+                    "url": meta.get("url", ""),
+                    "last_edited": edited_date.strftime("%B %d, %Y"),
+                    "age_days": age_days,
+                    "preview": documents[i][:150]
+                })
+        except:
+            continue
+
+    # Sort by oldest first
+    stale.sort(key=lambda x: x["age_days"], reverse=True)
+    return stale
 
 
 def run_knowledge_gap_analysis(user_context=""):
@@ -132,6 +221,20 @@ def run_knowledge_gap_analysis(user_context=""):
     print("🔦 Detecting knowledge gaps...")
     blind_spots = detect_blind_spots(list(cluster_names.values()), user_context)
 
+    # Detect contradictions
+    print("⚡ Detecting contradictions...")
+    all_contradictions = []
+    for label, data in clusters.items():
+        contradictions = detect_contradictions(
+            data["chunks"],
+            data["metadatas"]
+        )
+        all_contradictions.extend(contradictions)
+
+    # Detect stale notes
+    print("🕰️  Detecting stale notes...")
+    stale_notes = detect_stale_notes(metadatas, documents, days_threshold=90)
+
     results = {
         "clusters": [
             {
@@ -143,6 +246,8 @@ def run_knowledge_gap_analysis(user_context=""):
             for label, data in clusters.items()
         ],
         "blind_spots": blind_spots,
+        "contradictions": all_contradictions,
+        "stale_notes": stale_notes
     }
 
     return results, None

@@ -42,11 +42,35 @@ Context from notes:
     ("human", "{question}")
 ])
 
-# Manual chat history (replaces ConversationBufferMemory)
-chat_history = []
+def ask_streaming(question, chat_history = None):
+    if chat_history is None:
+        chat_history = []
 
+    docs = retriever.invoke(question)
+    context = "\n\n".join([doc.page_content for doc in docs])
+    chain = prompt | llm
+    
+    response = chain.stream({
+        "context": context,
+        "chat_history": chat_history,
+        "question": question
+    })
 
-def ask(question):
+    for chunk in response:
+        if isinstance(chunk.content, str):
+            text = chunk.content
+        elif chunk.content and isinstance(chunk.content, list):
+            text = chunk.content[0].get("text", "")
+        else:
+            text = ""
+    
+        if text:
+            yield text
+
+def ask(question, chat_history = None):
+    if chat_history is None:
+        chat_history = []
+    
     # Retrieve relevant chunks
     docs = retriever.invoke(question)
     context = "\n\n".join([doc.page_content for doc in docs])
@@ -62,9 +86,11 @@ def ask(question):
     })
 
     # Update history
-    chat_history.append(HumanMessage(content=question))
     answer = response.content if isinstance(response.content, str) else response.content[0]["text"]
-    chat_history.append(AIMessage(content=answer))
+    updated_history = chat_history + [
+        HumanMessage(content=question),
+        AIMessage(content=answer),
+    ]
 
     # Deduplicate sources
     seen = set()
@@ -80,7 +106,7 @@ def ask(question):
                 "url": url
             })
 
-    return answer, unique_sources
+    return answer, unique_sources, updated_history
 
 
 if __name__ == "__main__":
